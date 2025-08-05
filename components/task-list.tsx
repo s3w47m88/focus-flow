@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Task } from '@/lib/types'
 import { Circle, CheckCircle2, Calendar, Flag, MoreHorizontal, Trash2, Edit, User, ChevronRight, ChevronDown } from 'lucide-react'
 import { format } from 'date-fns'
+import { getStartOfDay, isToday, isOverdue } from '@/lib/date-utils'
 
 interface TaskListProps {
   tasks: Task[]
@@ -24,6 +25,7 @@ export function TaskList({ tasks, showCompleted = false, onTaskToggle, onTaskEdi
   const [hoveredTask, setHoveredTask] = useState<string | null>(null)
   const [menuOpenTask, setMenuOpenTask] = useState<string | null>(null)
   const [showCompletedTasks, setShowCompletedTasks] = useState(showCompleted)
+  const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set())
 
   const activeTasks = tasks.filter(task => !task.completed)
   const completedTasks = tasks.filter(task => task.completed)
@@ -42,20 +44,58 @@ export function TaskList({ tasks, showCompleted = false, onTaskToggle, onTaskEdi
     })
   }
 
-  const sortedActiveTasks = sortTasks(activeTasks)
-  const sortedCompletedTasks = sortTasks(completedTasks)
+  // Organize tasks hierarchically
+  const organizeTasksHierarchically = (tasksToOrganize: Task[]): Task[] => {
+    const taskMap = new Map(tasksToOrganize.map(task => [task.id, task]))
+    const rootTasks: Task[] = []
+    const sortedTasks: Task[] = []
+    
+    // First, identify root tasks (no parent)
+    tasksToOrganize.forEach(task => {
+      if (!task.parentId || !taskMap.has(task.parentId)) {
+        rootTasks.push(task)
+      }
+    })
+    
+    // Sort root tasks
+    const sortedRoots = sortTasks(rootTasks)
+    
+    // Build hierarchical structure
+    const addTaskWithChildren = (task: Task) => {
+      sortedTasks.push(task)
+      
+      // Skip children if task is collapsed
+      if (!collapsedTasks.has(task.id)) {
+        // Find and add children
+        const children = tasksToOrganize.filter(t => t.parentId === task.id)
+        sortTasks(children).forEach(child => {
+          addTaskWithChildren(child)
+        })
+      }
+    }
+    
+    sortedRoots.forEach(task => {
+      addTaskWithChildren(task)
+    })
+    
+    return sortedTasks
+  }
+
+  const sortedActiveTasks = organizeTasksHierarchically(activeTasks)
+  const sortedCompletedTasks = organizeTasksHierarchically(completedTasks)
 
   const formatDueDate = (date: string) => {
-    const taskDate = new Date(date)
+    const taskDate = getStartOfDay(date)
     const today = new Date()
+    today.setHours(0, 0, 0, 0)
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
     
-    if (taskDate.toDateString() === today.toDateString()) {
+    if (isToday(date)) {
       return 'Today'
     } else if (taskDate.toDateString() === tomorrow.toDateString()) {
       return 'Tomorrow'
-    } else if (taskDate < today) {
+    } else if (isOverdue(date)) {
       return format(taskDate, 'MMM d') + ' (Overdue)'
     } else {
       return format(taskDate, 'MMM d')
@@ -63,27 +103,68 @@ export function TaskList({ tasks, showCompleted = false, onTaskToggle, onTaskEdi
   }
 
   const getDueDateColor = (date: string) => {
-    const taskDate = new Date(date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    if (taskDate < today) {
+    if (isOverdue(date)) {
       return 'text-red-500'
-    } else if (taskDate.toDateString() === today.toDateString()) {
+    } else if (isToday(date)) {
       return 'text-green-500'
     }
     return 'text-zinc-400'
   }
 
-  const renderTask = (task: Task) => (
+  const hasChildren = (taskId: string) => {
+    return tasks.some(t => t.parentId === taskId)
+  }
+
+  const getIndentLevel = (task: Task): number => {
+    let level = 0
+    let currentTask = task
+    while (currentTask.parentId) {
+      level++
+      currentTask = tasks.find(t => t.id === currentTask.parentId) || currentTask
+      if (currentTask.id === task.id) break // Prevent infinite loop
+    }
+    return level
+  }
+
+  const renderTask = (task: Task) => {
+    const indentLevel = getIndentLevel(task)
+    const hasSubtasks = hasChildren(task.id)
+    const isCollapsed = collapsedTasks.has(task.id)
+    
+    return (
     <div
       key={task.id}
       className={`group relative flex items-start gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 transition-colors ${
         task.completed ? 'opacity-50' : ''
       }`}
+      style={{ paddingLeft: `${16 + indentLevel * 24}px` }}
       onMouseEnter={() => setHoveredTask(task.id)}
       onMouseLeave={() => setHoveredTask(null)}
     >
+      {hasSubtasks && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setCollapsedTasks(prev => {
+              const next = new Set(prev)
+              if (next.has(task.id)) {
+                next.delete(task.id)
+              } else {
+                next.add(task.id)
+              }
+              return next
+            })
+          }}
+          className="text-zinc-400 hover:text-zinc-300 transition-colors mr-1"
+        >
+          {isCollapsed ? (
+            <ChevronRight className="w-4 h-4" />
+          ) : (
+            <ChevronDown className="w-4 h-4" />
+          )}
+        </button>
+      )}
+      
       <button
         onClick={() => onTaskToggle(task.id)}
         className={`mt-0.5 transition-colors ${
@@ -101,8 +182,8 @@ export function TaskList({ tasks, showCompleted = false, onTaskToggle, onTaskEdi
 
       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onTaskEdit(task)}>
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1">
-            <p className={`text-sm break-words ${task.completed ? 'line-through text-zinc-500' : 'text-white'}`}>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm break-words whitespace-normal overflow-hidden ${task.completed ? 'line-through text-zinc-500' : 'text-white'}`}>
               {task.name}
             </p>
             
@@ -185,7 +266,8 @@ export function TaskList({ tasks, showCompleted = false, onTaskToggle, onTaskEdi
         </div>
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <div className="py-4">

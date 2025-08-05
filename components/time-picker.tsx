@@ -84,7 +84,7 @@ export function TimePicker({ value, onChange, className, placeholder = 'Select t
                           className={cn(
                             "px-2 py-1.5 text-sm rounded transition-colors",
                             value === time
-                              ? "bg-red-500 text-white"
+                              ? "btn-theme-primary text-white"
                               : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                           )}
                         >

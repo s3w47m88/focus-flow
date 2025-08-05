@@ -4,12 +4,17 @@ export interface User {
   lastName: string
   email?: string
   todoistId?: string
+  profileColor?: string
+  animationsEnabled?: boolean
 }
 
 export interface Organization {
   id: string
   name: string
   color: string
+  description?: string
+  archived?: boolean
+  order?: number
 }
 
 export interface Project {
@@ -22,6 +27,7 @@ export interface Project {
   archived?: boolean
   budget?: number
   deadline?: string
+  order?: number
   createdAt: string
   updatedAt: string
   todoistId?: string

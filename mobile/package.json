@@ -1,0 +1,18 @@
+{
+  "name": "loud-and-clear-mobile",
+  "version": "1.0.0",
+  "description": "Mobile configuration for Loud & Clear",
+  "private": true,
+  "scripts": {
+    "prepare": "node scripts/prepare-mobile-build.js",
+    "restore": "node scripts/restore-env.js",
+    "cap": "cap"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^5.0.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^5.0.0",
+    "@capacitor/ios": "^5.0.0"
+  }
+}

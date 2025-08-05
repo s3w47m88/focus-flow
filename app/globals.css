@@ -24,6 +24,15 @@
     --input: 240 5.9% 90%;
     --ring: 240 10% 3.9%;
     --radius: 0.5rem;
+    
+    /* Theme variables */
+    --theme-primary: #EA580C;
+    --theme-gradient: #EA580C;
+    --theme-primary-rgb: 234, 88, 12;
+    
+    /* User profile color */
+    --user-profile-color: #EA580C;
+    --user-profile-color-rgb: 234, 88, 12;
   }
 
   .dark {
@@ -56,4 +65,131 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Drag and drop styles */
+.dragging {
+  opacity: 0.5;
+  cursor: grabbing !important;
+}
+
+.drag-ghost {
+  opacity: 0.8;
+  transform: rotate(2deg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Visual shift on drag over */
+.drag-over-top {
+  border-top: 2px solid #ef4444;
+  padding-top: 8px;
+  margin-top: -8px;
+}
+
+.drag-over-bottom {
+  border-bottom: 2px solid #ef4444;
+  padding-bottom: 8px;
+  margin-bottom: -8px;
+}
+
+/* Theme-aware styles */
+.theme-primary-bg {
+  background: var(--theme-gradient);
+}
+
+.theme-primary-text {
+  color: var(--theme-primary);
+}
+
+.theme-primary-border {
+  border-color: var(--theme-primary);
+}
+
+/* Button styles using theme */
+.btn-theme-primary {
+  background: var(--theme-gradient);
+  color: white;
+}
+
+.btn-theme-primary:hover {
+  filter: brightness(1.1);
+}
+
+/* Focus styles using theme */
+.focus-theme:focus {
+  outline: none;
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), 0.1);
+}
+
+.focus-theme:focus-visible {
+  outline: none;
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), 0.1);
+}
+
+/* Simple border focus style */
+.border-theme-focus:focus {
+  border-color: var(--theme-primary) !important;
+  outline: none;
+}
+
+.border-theme-focus:focus-visible {
+  border-color: var(--theme-primary) !important;
+  outline: none;
+}
+
+/* Ring styles using theme */
+.ring-theme:focus {
+  --tw-ring-opacity: 1;
+  --tw-ring-color: var(--theme-primary);
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--theme-primary);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
+.ring-theme:focus-visible {
+  --tw-ring-opacity: 1;
+  --tw-ring-color: var(--theme-primary);
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--theme-primary);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
+/* Button styles using theme */
+.btn-theme-primary {
+  background: var(--theme-gradient);
+  color: white;
+}
+
+/* User profile color classes */
+.user-profile-bg {
+  background-color: var(--user-profile-color);
+}
+
+.user-profile-ring {
+  --tw-ring-color: var(--user-profile-color);
+}
+
+/* Circular background for icons */
+.icon-circle-bg {
+  background: var(--theme-gradient);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.icon-circle-bg:hover {
+  transform: scale(1.1);
+  opacity: 0.9;
+}
+
+/* Disable animations when needed */
+.no-animations * {
+  animation: none !important;
+  transition: none !important;
 }

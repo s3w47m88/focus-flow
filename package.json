@@ -7,9 +7,20 @@
     "build": "next build",
     "start": "next start -p 3244",
     "lint": "next lint",
-    "migrate:todoist": "tsx scripts/migrate-todoist.ts"
+    "migrate:todoist": "tsx scripts/migrate-todoist.ts",
+    "mobile:init": "npm install @capacitor/core @capacitor/ios @capacitor/cli --save-exact",
+    "mobile:build": "npm run build && npm run mobile:export",
+    "mobile:export": "next export -o mobile/dist",
+    "mobile:sync": "cd mobile && npx cap sync",
+    "mobile:open": "cd mobile && npx cap open ios",
+    "mobile:run": "cd mobile && npx cap run ios",
+    "ios:build": "npm run mobile:build && npm run mobile:sync",
+    "ios:dev": "npm run ios:build && npm run mobile:open"
   },
   "dependencies": {
+    "@capacitor/cli": "7.4.2",
+    "@capacitor/core": "7.4.2",
+    "@capacitor/ios": "7.4.2",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-popover": "^1.1.14",

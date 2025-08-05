@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from 'react'
-import { X, Calendar, Clock, Flag, Bell, Paperclip, Hash, User, Tag, Plus, Circle, CheckCircle2, Trash2 } from 'lucide-react'
+import { X, Calendar, Clock, Flag, Bell, Paperclip, Hash, User, Tag, Plus, Circle, CheckCircle2, Trash2, CornerDownRight } from 'lucide-react'
 import { Database, Task, Reminder } from '@/lib/types'
 import { format } from 'date-fns'
 import {
@@ -42,6 +42,7 @@ export function TaskModal({
   const [dueDate, setDueDate] = useState('')
   const [dueTime, setDueTime] = useState<string>('')
   const [deadline, setDeadline] = useState('')
+  const [deadlineTime, setDeadlineTime] = useState<string>('')
   const [priority, setPriority] = useState<1 | 2 | 3 | 4>(4)
   const [selectedProject, setSelectedProject] = useState(defaultProjectId || '')
   const [selectedParentTask, setSelectedParentTask] = useState<string | null>(null)
@@ -58,6 +59,8 @@ export function TaskModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const [newSubtaskName, setNewSubtaskName] = useState('')
   const [isAddingSubtask, setIsAddingSubtask] = useState(false)
+  const [tagSuggestions, setTagSuggestions] = useState<typeof data.tags>([])
+  const [bouncingTagId, setBouncingTagId] = useState<string | null>(null)
 
   // Load task data in edit mode
   useEffect(() => {
@@ -66,7 +69,8 @@ export function TaskModal({
       setDescription(task.description || '')
       setDueDate(task.dueDate || '')
       setDueTime(task.dueTime || '')
-      setDeadline(task.deadline || '')
+      setDeadline(task.deadline ? task.deadline.split('T')[0] : '')
+      setDeadlineTime(task.deadline && task.deadline.includes('T') ? task.deadline.split('T')[1].substring(0, 5) : '')
       setPriority(task.priority)
       setSelectedProject(task.projectId || '')
       setSelectedParentTask(task.parentId || null)
@@ -85,6 +89,7 @@ export function TaskModal({
       setDueDate('')
       setDueTime('')
       setDeadline('')
+      setDeadlineTime('')
       setPriority(4)
       setSelectedProject(defaultProjectId || '')
       setSelectedParentTask(null)
@@ -103,9 +108,21 @@ export function TaskModal({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-        onClose()
+      const target = event.target as Node
+      
+      // Check if click is inside modal
+      if (modalRef.current && modalRef.current.contains(target)) {
+        return
       }
+      
+      // Check if click is inside any popover content (for time picker, selects, etc)
+      const popoverContent = (target as Element)?.closest('[data-radix-popper-content-wrapper]')
+      if (popoverContent) {
+        return
+      }
+      
+      // If not inside modal or popover, close the modal
+      onClose()
     }
 
     if (isOpen) {
@@ -117,6 +134,36 @@ export function TaskModal({
     }
   }, [isOpen, onClose])
 
+  // Update tag suggestions when typing
+  useEffect(() => {
+    if (newTagName.trim()) {
+      const filtered = data.tags.filter(tag => 
+        tag.name.toLowerCase().includes(newTagName.toLowerCase())
+      )
+      setTagSuggestions(filtered)
+    } else {
+      setTagSuggestions([])
+    }
+  }, [newTagName, data.tags])
+
+  // Automatically add reminder when date is selected (time optional)
+  useEffect(() => {
+    if (newReminderDate && showReminderInput) {
+      const datetime = newReminderTime 
+        ? `${newReminderDate}T${newReminderTime}:00`
+        : `${newReminderDate}T09:00:00`
+      
+      setReminders([...reminders, {
+        id: `reminder-${Date.now()}`,
+        datetime,
+        sent: false
+      }])
+      setNewReminderDate('')
+      setNewReminderTime('')
+      setShowReminderInput(false)
+    }
+  }, [newReminderDate, newReminderTime])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -125,7 +172,7 @@ export function TaskModal({
       description,
       dueDate: dueDate || undefined,
       dueTime: dueTime || undefined,
-      deadline: deadline || undefined,
+      deadline: deadline ? (deadlineTime ? `${deadline}T${deadlineTime}` : deadline) : undefined,
       priority,
       projectId: selectedProject,
       parentId: selectedParentTask || undefined,
@@ -208,6 +255,21 @@ export function TaskModal({
         ? prev.filter(id => id !== tagId)
         : [...prev, tagId]
     )
+  }
+
+  const handleSelectTagSuggestion = (tag: typeof data.tags[0]) => {
+    if (selectedTags.includes(tag.id)) {
+      // Tag is already selected, bounce it and close the input
+      setBouncingTagId(tag.id)
+      setTimeout(() => setBouncingTagId(null), 600) // Remove bounce class after animation
+      setNewTagName('')
+      setShowAddTag(false)
+    } else {
+      // Add the tag normally
+      setSelectedTags([...selectedTags, tag.id])
+      setNewTagName('')
+      setShowAddTag(false)
+    }
   }
 
   const handleAssignUser = () => {
@@ -319,7 +381,7 @@ export function TaskModal({
             value={taskName}
             onChange={(e) => setTaskName(e.target.value)}
             placeholder="Task name"
-            className="w-full bg-transparent text-xl font-medium text-white placeholder-zinc-500 focus:outline-none"
+            className="w-full bg-zinc-800 rounded-lg px-4 py-3 text-sm font-medium text-white placeholder-zinc-500 border border-zinc-700 focus-theme transition-all"
             required
             autoFocus
           />
@@ -329,85 +391,8 @@ export function TaskModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description"
-            className="w-full bg-zinc-800 text-white rounded-lg px-4 py-3 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500 min-h-[100px] resize-none"
+            className="w-full bg-zinc-800 text-white rounded-lg px-4 py-3 text-sm placeholder-zinc-500 border border-zinc-700 focus-theme min-h-[100px] resize-none transition-all"
           />
-
-          {/* Assignee */}
-          {assignedTo && (
-            <div className="flex items-center gap-2 text-sm bg-zinc-800 rounded px-3 py-1.5 w-fit">
-              <User className="w-3 h-3 text-zinc-400" />
-              <span className="text-zinc-300">{assignedTo}</span>
-              <button
-                type="button"
-                onClick={() => setAssignedTo(null)}
-                className="ml-auto text-zinc-500 hover:text-white"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Due Date & Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-zinc-800 rounded-lg flex items-center pr-2 focus-within:ring-2 focus-within:ring-red-500">
-              <Calendar className="ml-4 w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="flex-1 bg-transparent text-white pl-3 pr-2 py-3 focus:outline-none"
-              />
-              <button
-                onClick={() => setDueDate('')}
-                className="text-zinc-400 hover:text-zinc-200 transition-colors p-1"
-                type="button"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="bg-zinc-800 rounded-lg flex items-center pr-2 focus-within:ring-2 focus-within:ring-red-500">
-              <Clock className="ml-4 w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <div className="flex-1 relative">
-                <TimePicker
-                  value={dueTime}
-                  onChange={setDueTime}
-                  placeholder="Select time"
-                  className="bg-transparent border-0 hover:bg-transparent focus:ring-0"
-                />
-              </div>
-              {dueTime && (
-                <button
-                  onClick={() => setDueTime('')}
-                  className="text-zinc-400 hover:text-zinc-200 transition-colors p-1"
-                  type="button"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-          
-          {/* Deadline */}
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
-              <Calendar className="w-4 h-4" />
-              Deadline
-              {deadlineHighlight && (
-                <span className={`text-xs ${deadlineHighlight}`}>
-                  {new Date(deadline) < new Date() ? 'Overdue' : 'Due soon'}
-                </span>
-              )}
-            </div>
-            <input
-              type="date"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              className={`w-full bg-zinc-800 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus-within:ring-red-500 ${
-                deadlineHighlight ? deadlineHighlight : 'text-white'
-              }`}
-            />
-          </div>
 
           {/* Project & Parent Task */}
           <div className="grid grid-cols-2 gap-4">
@@ -421,7 +406,7 @@ export function TaskModal({
                 onValueChange={setSelectedProject}
                 required
               >
-                <SelectTrigger className="w-full bg-zinc-800 text-white border-zinc-700 focus:ring-2 focus:ring-red-500">
+                <SelectTrigger className="w-full bg-zinc-800 text-white border-zinc-700 focus:ring-2 ring-theme transition-all">
                   <SelectValue placeholder="Select a project" />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-800 border-zinc-700">
@@ -462,7 +447,7 @@ export function TaskModal({
                 onValueChange={(value) => setSelectedParentTask(value === 'none' ? null : value)}
                 disabled={!selectedProject}
               >
-                <SelectTrigger className="w-full bg-zinc-800 text-white border-zinc-700 focus:ring-2 focus:ring-red-500">
+                <SelectTrigger className="w-full bg-zinc-800 text-white border-zinc-700 focus:ring-2 ring-theme transition-all">
                   <SelectValue placeholder={
                     !selectedProject 
                       ? "Select a project first" 
@@ -492,41 +477,210 @@ export function TaskModal({
             </div>
           </div>
 
-          {/* Priority */}
+          {/* Due Date & Time */}
           <div>
             <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
-              <Flag className="w-4 h-4" />
-              Priority
+              <Calendar className="w-4 h-4" />
+              Due Date
             </div>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4].map((p) => (
+            <div className="grid grid-cols-2 gap-4">
+            <div className="bg-zinc-800 rounded-lg flex items-center pr-2 focus-within:ring-2 focus-within:ring-red-500">
+              <Calendar className="ml-4 w-4 h-4 text-zinc-500 flex-shrink-0" />
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="flex-1 bg-transparent text-white pl-3 pr-2 py-3 focus:outline-none"
+              />
+              <button
+                onClick={() => setDueDate('')}
+                className="text-zinc-400 hover:text-zinc-200 transition-colors p-1"
+                type="button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-zinc-800 rounded-lg flex items-center pr-2 focus-within:ring-2 focus-within:ring-red-500">
+              <Clock className="ml-4 w-4 h-4 text-zinc-500 flex-shrink-0" />
+              <TimePicker
+                value={dueTime}
+                onChange={setDueTime}
+                placeholder="Select time"
+                className="bg-transparent border-0 hover:bg-transparent focus:ring-0 flex-1"
+              />
+              {dueTime && (
                 <button
-                  key={p}
+                  onClick={() => setDueTime('')}
+                  className="text-zinc-400 hover:text-zinc-200 transition-colors p-1"
                   type="button"
-                  onClick={() => setPriority(p as 1 | 2 | 3 | 4)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    priority === p
-                      ? p === 1 
-                        ? 'bg-red-500 text-white'
-                        : p === 2
-                        ? 'bg-orange-500 text-white'
-                        : p === 3
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-zinc-700 text-white'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                  }`}
                 >
-                  P{p}
+                  <X className="w-4 h-4" />
                 </button>
-              ))}
+              )}
+            </div>
+          </div>
+          </div>
+          
+          {/* Deadline */}
+          <div>
+            <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
+              <Calendar className="w-4 h-4" />
+              Deadline
+              {deadlineHighlight && (
+                <span className={`text-xs ${deadlineHighlight}`}>
+                  {new Date(deadline) < new Date() ? 'Overdue' : 'Due soon'}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-zinc-800 rounded-lg flex items-center pr-2 focus-within:ring-2 focus-within:ring-red-500">
+                <Calendar className="ml-4 w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <input
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className={`flex-1 bg-transparent pl-3 pr-2 py-3 focus:outline-none ${
+                    deadlineHighlight ? deadlineHighlight : 'text-white'
+                  }`}
+                />
+                <button
+                  onClick={() => setDeadline('')}
+                  className="text-zinc-400 hover:text-zinc-200 transition-colors p-1"
+                  type="button"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="bg-zinc-800 rounded-lg flex items-center pr-2 focus-within:ring-2 focus-within:ring-red-500">
+                <Clock className="ml-4 w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <TimePicker
+                  value={deadlineTime}
+                  onChange={setDeadlineTime}
+                  placeholder="Select time"
+                  className="bg-transparent border-0 hover:bg-transparent focus:ring-0 flex-1"
+                />
+                {deadlineTime && (
+                  <button
+                    onClick={() => setDeadlineTime('')}
+                    className="text-zinc-400 hover:text-zinc-200 transition-colors p-1"
+                    type="button"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+
+          {/* Assignee & Priority */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
+                <User className="w-4 h-4" />
+                Assigned to
+              </div>
+              {assignedTo ? (
+                <div className="flex items-center gap-2 text-sm bg-zinc-800 rounded px-3 py-2.5 h-[42px]">
+                  <User className="w-3 h-3 text-zinc-400" />
+                  <span className="text-zinc-300 flex-1">{assignedTo}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAssignedTo(null)}
+                    className="text-zinc-500 hover:text-white"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : showAssignInput ? (
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={assignEmail}
+                    onChange={(e) => setAssignEmail(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAssignUser())}
+                    placeholder="Email address"
+                    className="flex-1 bg-zinc-800 text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 ring-theme transition-all"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAssignUser}
+                    className="btn-theme-primary text-white rounded px-3 py-2 text-sm transition-all"
+                  >
+                    Assign
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAssignInput(false)
+                      setAssignEmail('')
+                    }}
+                    className="text-zinc-400 hover:text-white p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAssignInput(true)}
+                  className="flex items-center gap-2 px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-colors text-sm w-full h-[42px]"
+                >
+                  <User className="w-4 h-4" />
+                  Assign to someone
+                </button>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
+                <Flag className="w-4 h-4" />
+                Priority
+              </div>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPriority(p as 1 | 2 | 3 | 4)}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      priority === p
+                        ? p === 1 
+                          ? 'bg-red-500 text-white'
+                          : p === 2
+                          ? 'bg-orange-500 text-white'
+                          : p === 3
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-zinc-700 text-white'
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    }`}
+                  >
+                    P{p}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Reminders */}
           <div>
-            <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
-              <Bell className="w-4 h-4" />
-              Reminders
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <Bell className="w-4 h-4" />
+                Reminders
+              </div>
+              {!showReminderInput && (
+                <div
+                  className="icon-circle-bg cursor-pointer"
+                  onClick={() => setShowReminderInput(true)}
+                  title="Add Reminder"
+                >
+                  <Plus className="w-4 h-4 text-white" />
+                </div>
+              )}
             </div>
             {reminders.map((reminder) => (
               <div key={reminder.id} className="flex items-center gap-2 mb-2 text-sm">
@@ -551,21 +705,16 @@ export function TaskModal({
                   type="date"
                   value={newReminderDate}
                   onChange={(e) => setNewReminderDate(e.target.value)}
-                  className="flex-1 bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="flex-1 bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 ring-theme transition-all"
+                  placeholder="Select date"
                 />
                 <input
                   type="time"
                   value={newReminderTime}
                   onChange={(e) => setNewReminderTime(e.target.value)}
-                  className="bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 ring-theme transition-all"
+                  placeholder="Time (optional)"
                 />
-                <button
-                  type="button"
-                  onClick={handleAddReminder}
-                  className="bg-red-500 text-white rounded px-3 py-1.5 text-sm hover:bg-red-600 transition-colors"
-                >
-                  Add
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -578,22 +727,25 @@ export function TaskModal({
                   <X className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowReminderInput(true)}
-                className="text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                Add Reminder
-              </button>
-            )}
+            ) : null}
           </div>
 
           {/* Tags */}
           <div>
-            <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
-              <Tag className="w-4 h-4" />
-              Tags
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <Tag className="w-4 h-4" />
+                Tags
+              </div>
+              {!showAddTag && (
+                <div
+                  className="icon-circle-bg cursor-pointer"
+                  onClick={() => setShowAddTag(true)}
+                  title="Add Tag"
+                >
+                  <Plus className="w-4 h-4 text-white" />
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {data.tags.map((tag) => (
@@ -605,7 +757,7 @@ export function TaskModal({
                     selectedTags.includes(tag.id)
                       ? 'bg-opacity-100 text-white'
                       : 'bg-opacity-20 text-zinc-400 hover:bg-opacity-40'
-                  }`}
+                  } ${bouncingTagId === tag.id ? 'animate-bounce' : ''}`}
                   style={{ 
                     backgroundColor: selectedTags.includes(tag.id) 
                       ? tag.color 
@@ -616,53 +768,78 @@ export function TaskModal({
                 </button>
               ))}
               {showAddTag ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newTagName}
-                    onChange={(e) => setNewTagName(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                    placeholder="Tag name"
-                    className="bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 w-32"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddTag}
-                    className="text-zinc-400 hover:text-white"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddTag(false)
-                      setNewTagName('')
-                    }}
-                    className="text-zinc-400 hover:text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                <div className="relative">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                      placeholder="Tag name"
+                      className="bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 ring-theme w-32 transition-all"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddTag}
+                      className="text-zinc-400 hover:text-white"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddTag(false)
+                        setNewTagName('')
+                      }}
+                      className="text-zinc-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {tagSuggestions.length > 0 && (
+                    <div className="absolute top-full mt-1 left-0 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-10 w-48 max-h-32 overflow-y-auto">
+                      {tagSuggestions.map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => handleSelectTagSuggestion(tag)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                        >
+                          <div 
+                            className="w-3 h-3 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          <span className="text-zinc-300">{tag.name}</span>
+                          {selectedTags.includes(tag.id) && (
+                            <span className="text-xs text-zinc-500 ml-auto">Selected</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowAddTag(true)}
-                  className="px-3 py-1.5 rounded-full border border-dashed border-zinc-600 text-sm text-zinc-400 hover:text-white hover:border-zinc-400 transition-all"
-                >
-                  <Plus className="w-4 h-4 inline mr-1" />
-                  Add Tag
-                </button>
-              )}
+              ) : null}
             </div>
           </div>
 
           {/* Subtasks (Edit mode only) */}
           {isEditMode && (
             <div>
-              <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
-                <Circle className="w-4 h-4" />
-                Subtasks
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-sm text-zinc-400">
+                  <CornerDownRight className="w-4 h-4" />
+                  Subtasks
+                </div>
+                {!isAddingSubtask && (
+                  <div
+                    className="icon-circle-bg cursor-pointer"
+                    onClick={() => setIsAddingSubtask(true)}
+                    title="Add Subtask"
+                  >
+                    <Plus className="w-4 h-4 text-white" />
+                  </div>
+                )}
               </div>
               {subtasks.map((subtask) => (
                 <div key={subtask.id} className="flex items-center gap-2 mb-2">
@@ -699,13 +876,13 @@ export function TaskModal({
                     onChange={(e) => setNewSubtaskName(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSubtask())}
                     placeholder="Subtask name"
-                    className="flex-1 bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="flex-1 bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 ring-theme transition-all"
                     autoFocus
                   />
                   <button
                     type="button"
                     onClick={handleAddSubtask}
-                    className="bg-red-500 text-white rounded px-3 py-1.5 text-sm hover:bg-red-600 transition-colors"
+                    className="btn-theme-primary text-white rounded px-3 py-1.5 text-sm transition-all"
                   >
                     Add
                   </button>
@@ -720,67 +897,10 @@ export function TaskModal({
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingSubtask(true)}
-                  className="text-sm text-zinc-400 hover:text-white transition-colors"
-                >
-                  <Plus className="w-4 h-4 inline mr-1" />
-                  Add Subtask
-                </button>
-              )}
+              ) : null}
             </div>
           )}
 
-          {/* Assignee Input */}
-          {!assignedTo && (
-            <div>
-              <div className="flex items-center gap-2 mb-2 text-sm text-zinc-400">
-                <User className="w-4 h-4" />
-                Assigned to
-              </div>
-              {showAssignInput ? (
-                <div className="flex gap-2">
-                  <input
-                    type="email"
-                    value={assignEmail}
-                    onChange={(e) => setAssignEmail(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAssignUser())}
-                    placeholder="Email address"
-                    className="flex-1 bg-zinc-800 text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAssignUser}
-                    className="bg-red-500 text-white rounded px-3 py-1.5 text-sm hover:bg-red-600 transition-colors"
-                  >
-                    Assign
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAssignInput(false)
-                      setAssignEmail('')
-                    }}
-                    className="text-zinc-400 hover:text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowAssignInput(true)}
-                  className="text-sm text-zinc-400 hover:text-white transition-colors"
-                >
-                  <User className="w-4 h-4 inline mr-1" />
-                  Assign to someone
-                </button>
-              )}
-            </div>
-          )}
 
           {/* Form Actions */}
           <div className="flex justify-between pt-6 border-t border-zinc-800">
@@ -789,7 +909,7 @@ export function TaskModal({
                 <button
                   type="button"
                   onClick={() => onDelete(task.id)}
-                  className="text-red-500 hover:text-red-400 transition-colors flex items-center gap-2"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete Task
@@ -806,7 +926,7 @@ export function TaskModal({
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="px-6 py-2 btn-theme-primary text-white rounded-lg transition-all"
               >
                 {isEditMode ? 'Save Changes' : 'Add Task'}
               </button>

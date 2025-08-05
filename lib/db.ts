@@ -93,9 +93,15 @@ export async function deleteProject(id: string): Promise<boolean> {
 
 export async function createProject(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project> {
   const db = await getDatabase()
+  
+  // Find the highest order number for projects in this organization
+  const orgProjects = db.projects.filter(p => p.organizationId === project.organizationId)
+  const maxOrder = Math.max(0, ...orgProjects.map(p => p.order || 0))
+  
   const newProject: Project = {
     ...project,
     id: `project-${Date.now()}`,
+    order: maxOrder + 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
@@ -106,13 +112,59 @@ export async function createProject(project: Omit<Project, 'id' | 'createdAt' | 
 
 export async function createOrganization(organization: Omit<Organization, 'id'>): Promise<Organization> {
   const db = await getDatabase()
+  
+  // Find the highest order number for organizations
+  const maxOrder = Math.max(0, ...db.organizations.map(o => o.order || 0))
+  
   const newOrganization: Organization = {
     ...organization,
     id: `org-${Date.now()}`,
+    order: maxOrder + 1
   }
   db.organizations.push(newOrganization)
   await saveDatabase(db)
   return newOrganization
+}
+
+export async function updateOrganization(id: string, updates: Partial<Organization>): Promise<Organization | null> {
+  const db = await getDatabase()
+  const orgIndex = db.organizations.findIndex(o => o.id === id)
+  if (orgIndex === -1) return null
+  
+  db.organizations[orgIndex] = {
+    ...db.organizations[orgIndex],
+    ...updates
+  }
+  await saveDatabase(db)
+  return db.organizations[orgIndex]
+}
+
+export async function reorderProjects(organizationId: string, projectIds: string[]): Promise<void> {
+  const db = await getDatabase()
+  
+  // Update the order of each project
+  projectIds.forEach((projectId, index) => {
+    const projectIndex = db.projects.findIndex(p => p.id === projectId)
+    if (projectIndex !== -1) {
+      db.projects[projectIndex].order = index
+    }
+  })
+  
+  await saveDatabase(db)
+}
+
+export async function reorderOrganizations(organizationIds: string[]): Promise<void> {
+  const db = await getDatabase()
+  
+  // Update the order of each organization
+  organizationIds.forEach((orgId, index) => {
+    const orgIndex = db.organizations.findIndex(o => o.id === orgId)
+    if (orgIndex !== -1) {
+      db.organizations[orgIndex].order = index
+    }
+  })
+  
+  await saveDatabase(db)
 }
 
 export async function deleteOrganization(id: string): Promise<boolean> {

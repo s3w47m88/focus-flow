@@ -131,8 +131,26 @@ export async function migrateTodoistData(backupDir: string): Promise<Database> {
             return getSectionForTask(tasks, sections, idx) === i
           })
           
-          for (const todoistTask of sectionTasks) {
-            const task = createTask(todoistTask, project.id, allUsers, taskCounter++)
+          const taskIdMap = new Map<number, string>() // Map task index to task ID
+          for (let i = 0; i < sectionTasks.length; i++) {
+            const todoistTask = sectionTasks[i]
+            const taskId = `task-${taskCounter++}`
+            taskIdMap.set(i, taskId)
+            
+            // Find parent task based on indent level
+            let parentId: string | undefined
+            if (todoistTask.indent > 1) {
+              // Look backwards for a task with lower indent
+              for (let j = i - 1; j >= 0; j--) {
+                if (sectionTasks[j].indent < todoistTask.indent) {
+                  parentId = taskIdMap.get(j)
+                  break
+                }
+              }
+            }
+            
+            const task = createTask(todoistTask, project.id, allUsers, parseInt(taskId.split('-')[1]))
+            task.parentId = parentId
             database.tasks.push(task)
           }
         }
@@ -148,9 +166,27 @@ export async function migrateTodoistData(backupDir: string): Promise<Database> {
         }
         database.projects.push(project)
         
-        // Add all tasks to this project
-        for (const todoistTask of tasks) {
-          const task = createTask(todoistTask, project.id, allUsers, taskCounter++)
+        // Add all tasks to this project with parent relationships
+        const taskIdMap = new Map<number, string>() // Map task index to task ID
+        for (let i = 0; i < tasks.length; i++) {
+          const todoistTask = tasks[i]
+          const taskId = `task-${taskCounter++}`
+          taskIdMap.set(i, taskId)
+          
+          // Find parent task based on indent level
+          let parentId: string | undefined
+          if (todoistTask.indent > 1) {
+            // Look backwards for a task with lower indent
+            for (let j = i - 1; j >= 0; j--) {
+              if (tasks[j].indent < todoistTask.indent) {
+                parentId = taskIdMap.get(j)
+                break
+              }
+            }
+          }
+          
+          const task = createTask(todoistTask, project.id, allUsers, parseInt(taskId.split('-')[1]))
+          task.parentId = parentId
           database.tasks.push(task)
         }
       }

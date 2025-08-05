@@ -27,6 +27,8 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env
+.env.backup
 
 # vercel
 .vercel
@@ -34,3 +36,30 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Mobile/iOS specific
+/mobile/ios/
+/mobile/dist/
+/mobile/node_modules/
+*.xcworkspace
+*.xcuserdata
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Capacitor
+/mobile/android/
+/mobile/electron/
+capacitor.log
+
+# iOS
+Pods/
+Podfile.lock
+*.mode1v3
+*.mode2v3
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+xcuserdata/
